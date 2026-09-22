@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#071628" />
+    <meta name="description" content="Jelly Vision Maze｜在柔光與迷霧之間找到出口。" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23071628'/%3E%3Cpath d='M16 40c0-13 7-22 16-22s16 9 16 22c0 9-7 12-16 12S16 49 16 40Z' fill='%235b8dff'/%3E%3Ccircle cx='26' cy='34' r='3' fill='white'/%3E%3Ccircle cx='38' cy='34' r='3' fill='white'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="./src/styles.css?v=jelly-vision-maze-v2" />
+    <title>Jelly Vision Maze｜晶亮迷宮</title>
+  </head>
+  <body>
+    <main id="app" class="app-shell">
+      <header class="topbar">
+        <button id="brand-home" class="brand-mark" type="button" aria-label="回到遊戲首頁">
+          <span class="brand-orb" aria-hidden="true"><span></span></span>
+          <span><strong>JELLY</strong><small>VISION MAZE</small></span>
+        </button>
+        <div class="topbar-actions">
+          <span class="topbar-note">012S PLAY LAB</span>
+          <button id="sound-toggle" class="icon-button" type="button" aria-label="關閉音效" aria-pressed="true">♫</button>
+        </div>
+      </header>
+
+      <section id="start-screen" class="screen start-screen" aria-labelledby="game-title">
+        <div class="start-layout">
+          <div class="start-intro">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> FOLLOW THE LITTLE LIGHT</div>
+            <div class="start-intro-visual" aria-hidden="true">
+              <span class="start-intro-visual-orbit"></span>
+              <img src="./src/assets/jelly-front.webp" alt="" />
+              <span class="start-intro-visual-spark start-intro-visual-spark-a">✦</span>
+              <span class="start-intro-visual-spark start-intro-visual-spark-b">·</span>
+            </div>
+            <h1 id="game-title">JELLY<br /><em>VISION</em><br />MAZE</h1>
+            <p class="start-lede">在迷霧中找到出口，讓每一束柔光都成為你的路線。</p>
+            <div class="how-to-play">
+              <div class="how-to-play-icon" aria-hidden="true">◌</div>
+              <div>
+                <strong>小範圍視野 · 輕巧探索</strong>
+                <p>六條路線、兩段旅程。收集微光、發出前方脈衝，在遠征中點亮信標。</p>
+              </div>
+            </div>
+            <details class="explorer-guide">
+              <summary>脈衝、危險與三星怎麼玩？ <span aria-hidden="true">＋</span></summary>
+              <div class="guide-content">
+                <p><strong>◎ 前方脈衝</strong> 按 Q 或「脈衝」，依按下當下水母的面向，照亮前方 7 格扇形視野 2 秒。每關有 2 次，微光與信標各補充 1 次。</p>
+                <p><strong>◇ 信標遠征</strong> 第 4–6 關先點亮所有信標，再到出口。靠近就會自動點亮，可用前方脈衝觀察遠處的信標。</p>
+                <p><strong>≋ 墨霧陷阱</strong> 第 2 關開始出現。休眠時可通過，金色驚嘆號預警後噴發 2 秒；碰到會讓視野縮至 1.65 格，持續 3 秒。</p>
+                <p><strong>◒ 暗影怪</strong> 第 3 關開始沿固定路線巡邏。Q 發射時可暈眩扇形內的怪物 3 秒、封印陷阱 4 秒。中招後保護 5 秒，不會連續受影響；任何補給都能清除墨霧。</p>
+                <p><strong>★★★ 三星挑戰</strong> 找到出口、收齊微光、收齊補給，各得一星。同一次探索完成三項即可取得三星；脈衝不扣星。</p>
+                <p class="guide-reassurance">沒有時間限制，也沒有生命值。慢慢找路，隨時暫停；時間只影響額外分數。</p>
+              </div>
+            </details>
+          </div>
+
+          <div class="level-lounge">
+            <div class="panel-heading">
+              <div>
+                <span class="section-kicker">SELECT A ROUTE</span>
+                <h2>選擇探索關卡</h2>
+              </div>
+              <span class="route-count">06 ROUTES</span>
+            </div>
+            <div class="chapter-switch" role="group" aria-label="選擇章節">
+              <button type="button" data-chapter="1" aria-pressed="true">01 · 微光初旅</button>
+              <button type="button" data-chapter="2" aria-pressed="false">02 · 信標遠征 <span>NEW</span></button>
+            </div>
+            <div id="level-list" class="level-list" role="group" aria-label="選擇探索關卡"></div>
+            <div class="route-preview">
+              <canvas id="route-preview" width="248" height="160" aria-label="所選關卡的迷宮預覽"></canvas>
+              <div class="route-details" aria-live="polite">
+                <span class="section-kicker" id="route-theme">01 / 微光花園</span>
+                <p id="route-description">跟著第一束光，練習記住走過的路。</p>
+                <p id="route-objective" class="route-objective"></p>
+                <span id="route-meta" class="route-meta"></span>
+                <strong id="route-best" class="route-best">尚未探索 · 從這裡出發</strong>
+              </div>
+            </div>
+            <div class="journey-summary"><span id="journey-progress">0 / 6 路線完成 · 0 / 18 星</span><span>出口 / 微光 / 補給 = 三星</span><i><i id="journey-fill"></i></i></div>
+            <button id="continue-journey" class="continue-journey" type="button"></button>
+            <div class="start-actions">
+              <button id="start-button" class="primary-button" type="button"><span>開始探索</span><span aria-hidden="true">→</span></button>
+              <p class="control-hint"><kbd>WASD</kbd> <kbd>↑↓←→</kbd> 移動<br /><kbd>Q</kbd> 脈衝 · 微光或信標補充次數</p>
+            </div>
+          </div>
+        </div>
+        <footer class="screen-footer"><span>JELLY WORLD SERIES</span><span>SOFT LIGHT / CLEAR ROUTE</span></footer>
+      </section>
+
+      <section id="game-screen" class="screen game-screen" hidden aria-label="遊戲畫面">
+        <div class="game-header">
+          <div class="game-header-title"><span class="live-dot"></span><span id="game-level-label">LEVEL 1</span><small id="game-level-name">SOFT START</small></div>
+          <div class="vision-readout"><span>VISION</span><div class="vision-meter"><span id="vision-meter-fill"></span></div><strong id="vision-meter-value">30%</strong></div>
+          <div class="time-readout"><span>TIME</span><strong id="time-value">00:00</strong></div>
+        </div>
+
+        <div class="game-stage-wrap">
+          <div class="stage-toolbar">
+            <p><span class="legend-dot legend-exit"></span> <strong id="mission-value" aria-live="polite">找到金色出口</strong><span class="toolbar-secondary"> · 跟著光，慢慢探索</span></p>
+            <div><button id="camera-toggle" class="ghost-button" type="button" aria-pressed="false">跟隨視角</button><button id="pause-button" class="ghost-button" type="button">Ⅱ 暫停</button></div>
+          </div>
+          <div id="game-viewport" class="game-viewport" style="--map-ratio: 1.25;">
+            <canvas id="game-canvas" tabindex="0" aria-label="迷宮遊戲，方向鍵或 WASD 移動，Q 脈衝，Escape 暫停" aria-describedby="game-tip"></canvas>
+            <div id="vision-toast" class="vision-toast" aria-live="polite"></div>
+            <div class="canvas-corner canvas-corner-tl" aria-hidden="true"></div>
+            <div class="canvas-corner canvas-corner-br" aria-hidden="true"></div>
+          </div>
+          <div class="live-stats">
+            <div><span>探索足跡</span><strong id="exploration-value">0%</strong><i class="mini-meter"><i id="exploration-fill"></i></i></div>
+              <div><span>視野補給</span><strong id="boost-value">基本視野</strong></div>
+              <div><span>環境狀態</span><strong id="hazard-value">安全練習</strong></div>
+            <div><span>微光連鎖</span><strong id="chain-value">等待微光</strong><i class="mini-meter"><i id="chain-fill"></i></i></div>
+          </div>
+          <div class="stage-legend" aria-label="遊戲圖例">
+            <span><i class="legend-dot legend-jelly"></i> JELLY</span>
+            <span><i class="legend-dot legend-chocolate"></i> 巧克力 · 擴展視野</span>
+            <span><i class="legend-dot legend-drink"></i> 飲料 · 延長時間</span>
+            <span><i class="legend-dot legend-echo"></i> 微光 · 連鎖加分</span>
+            <span><i class="legend-dot legend-exit"></i> 出口</span>
+            <span><i class="legend-dot legend-beacon"></i> 信標 · 開啟出口</span>
+            <span><i class="legend-dot legend-trap"></i> ≋ 墨霧 · 等休眠再通過</span>
+            <span><i class="legend-dot legend-monster"></i> 暗影怪 · Q 可暈眩</span>
+          </div>
+        </div>
+
+        <div class="game-footer">
+          <div class="game-progress">
+            <div class="supply-counts"><span>SUPPLY</span><strong id="supply-count">0 / 0</strong></div>
+            <div class="echo-counts"><span>ECHO</span><strong id="echo-count">0 / 0</strong></div>
+          </div>
+          <p id="game-tip" class="game-tip">靠近亮點自動拾取補給。</p>
+          <div class="game-actions"><button id="scan-button" class="ghost-button scan-button" type="button" title="Q 朝面向照亮前方 2 秒，收集微光或信標可補充">◎ 脈衝 2/2</button><button id="game-restart" class="ghost-button" type="button" aria-label="重新開始" title="R 重新開始">↻</button></div>
+        </div>
+
+        <div class="touch-controls" aria-label="手機方向控制">
+          <div class="dpad">
+            <button type="button" data-dir="up" aria-label="向上">↑</button>
+            <button type="button" data-dir="left" aria-label="向左">←</button>
+            <button type="button" data-dir="right" aria-label="向右">→</button>
+            <button type="button" data-dir="down" aria-label="向下">↓</button>
+          </div>
+          <div class="touch-note">按住方向鍵移動<br />朝想看的方向發出脈衝。</div>
+        </div>
+      </section>
+
+      <section id="clear-screen" class="screen clear-screen" hidden aria-labelledby="clear-title">
+        <div class="clear-card">
+          <div class="clear-sparkles" aria-hidden="true"><span>✦</span><span>✧</span><span>·</span></div>
+          <div class="clear-jelly-art" aria-hidden="true"><img src="./src/assets/jelly-front.webp" alt="" /><span>✦</span></div>
+          <span class="section-kicker">ROUTE COMPLETE</span>
+          <h2 id="clear-title">CLEAR!</h2>
+          <p id="clear-subtitle" class="clear-subtitle">你在柔光裡找到了出口。</p>
+          <div id="clear-stars" class="clear-stars" role="img" aria-label="本次星數">☆☆☆</div>
+          <p id="clear-star-hint" class="clear-star-hint"></p>
+          <div id="clear-achievements" class="clear-achievements"></div>
+          <p id="clear-best" class="clear-best"></p>
+          <div class="clear-stats">
+            <div><span>TIME</span><strong id="clear-time">00:00</strong></div>
+            <div><span>EXPLORED</span><strong id="clear-explored">0%</strong></div>
+            <div><span>SUPPLY</span><strong id="clear-supply">0</strong></div>
+            <div><span>ECHO</span><strong id="clear-echo">0</strong></div>
+            <div class="stat-total"><span>TOTAL SCORE</span><strong id="clear-score">0000</strong></div>
+          </div>
+          <div class="score-breakdown"><span>CLEAR BASE <b>1000</b></span><span>TIME BONUS <b id="clear-time-bonus">+000</b></span><span>SUPPLY <b id="clear-supply-bonus">+000</b></span><span>ECHO <b id="clear-echo-bonus">+000</b></span><span>BEACON <b id="clear-beacon-bonus">+000</b></span></div>
+          <p id="clear-journey" class="clear-journey"></p>
+          <div class="clear-actions">
+            <button id="next-level-button" class="primary-button" type="button"><span>下一關</span><span aria-hidden="true">→</span></button>
+            <button id="retry-button" class="secondary-button" type="button">重新挑戰</button>
+          </div>
+          <button id="home-button" class="text-button" type="button">回到關卡選擇</button>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="pause-dialog" class="pause-dialog" aria-labelledby="pause-title" aria-describedby="pause-description">
+      <span class="section-kicker">TAKE A LITTLE BREATH</span>
+      <h2 id="pause-title">柔光，等你回來。</h2>
+      <p id="pause-description">已暫停探索，計時與補給倒數都會停留在這一刻。</p>
+      <div class="pause-controls"><kbd>WASD / ↑↓←→</kbd> 移動 <kbd>Esc</kbd> 暫停／繼續<br /><kbd>Q</kbd> 前方脈衝：依水母面向照亮前方 7 格，持續 2 秒<br />收集微光或點亮信標，補充 1 次脈衝（最多 2 次）。<br />Q 同時封印陷阱 4 秒、暈眩暗影怪 3 秒。<br />墨霧縮小視野 3 秒；補給可清除，中招後保護 5 秒。</div>
+      <button id="resume-button" class="primary-button" type="button" autofocus><span>繼續探索</span><span aria-hidden="true">→</span></button>
+      <div class="pause-actions"><button id="pause-restart" class="secondary-button" type="button">重新開始</button><button id="pause-home" class="secondary-button" type="button">回到關卡選擇</button></div>
+    </dialog>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>
+
+
+
