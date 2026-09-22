@@ -11,6 +11,8 @@ const sound = new SoundController();
 const hud = new HUD();
 const progress = new ProgressStore();
 const pauseDialog = $('#pause-dialog');
+const confirmDialog = $('#confirm-dialog');
+let pendingConfirmation = null;
 let selectedLevel = 'level-1';
 let lastResult = null;
 
@@ -18,6 +20,7 @@ const game = new Game({
   canvas: $('#game-canvas'), viewport: $('#game-viewport'), hud,
   onClear: (result) => { lastResult = result; sound.clear(); showClear(result); },
   onPickup: (kind) => sound.pickup(kind), onEcho: (chain) => sound.echo(chain), onMove: () => sound.move(),
+  onExitPrompt: (details) => openConfirmation('exit', details),
   onPause: (paused) => {
     if (paused && !pauseDialog.open) pauseDialog.showModal();
     if (!paused && pauseDialog.open) pauseDialog.close();
@@ -25,15 +28,19 @@ const game = new Game({
   }
 });
 const input = new InputController({
-  onRestart: () => game.restart(),
+  onRestart: () => requestRestart(),
   onScan: () => game.useScan(),
-  onEscape: (event) => { if (!screens.game.hidden && !pauseDialog.open) { event.preventDefault(); game.togglePause(); } },
+  onEscape: (event) => {
+    if (!screens.game.hidden && confirmDialog.open) { event.preventDefault(); cancelConfirmation(); return; }
+    if (!screens.game.hidden && !pauseDialog.open) { event.preventDefault(); game.togglePause(); }
+  },
   onBlur: () => game.setPaused(true)
 });
 game.setInput(input);
 
 function showScreen(name) {
   Object.entries(screens).forEach(([key, screen]) => { screen.hidden = key !== name; });
+  document.body.classList.toggle('game-active', name === 'game');
   $('#app').scrollTo({ left: 0, top: 0, behavior: 'auto' });
   window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
   if (name === 'game') $('#game-canvas').focus({ preventScroll: true });
@@ -63,10 +70,11 @@ function updateRoutes() {
     card.hidden = LEVELS[id].chapter !== chapter;
     card.classList.toggle('is-selected', id === selectedLevel);
     card.setAttribute('aria-pressed', String(id === selectedLevel));
-    card.classList.toggle('is-complete', Boolean(progress.get(id)));
-    card.querySelector('.level-card-arrow').textContent = progress.get(id) ? '✓' : '↗';
-    const record = progress.get(id);
-    card.querySelector('small').textContent = `${LEVELS[id].theme}${record ? ' · ' + '★'.repeat(record.stars) + '☆'.repeat(3 - record.stars) : ''}`;
+    const summary = progress.getSummary(id);
+    const record = summary.historical;
+    card.classList.toggle('is-complete', Boolean(record));
+    card.querySelector('.level-card-arrow').textContent = summary.hasCurrent ? '✓' : record ? '◌' : '↗';
+    card.querySelector('small').textContent = `${LEVELS[id].theme}${record ? ' · ' + '★'.repeat(record.stars) + '☆'.repeat(3 - record.stars) : ''}${record && summary.routeUpdated ? (summary.hasCurrent ? ' · 新版' : ' · 路線已更新') : ''}`;
   });
   const level = LEVELS[selectedLevel];
   const { theme, description, accent: color } = level;
@@ -85,10 +93,19 @@ function updateRoutes() {
   continueButton.hidden = !recommendation;
   if (recommendation) {
     continueButton.dataset.levelTarget = recommendation;
-    continueButton.textContent = `${progress.get(recommendation) ? '挑戰三星' : '接續旅程'} → ${LEVELS[recommendation].number} ${LEVELS[recommendation].theme}`;
+    continueButton.textContent = `${progress.getCurrent(recommendation) ? '挑戰三星' : '接續旅程'} → ${LEVELS[recommendation].number} ${LEVELS[recommendation].theme}`;
   }
-  const best = progress.get(selectedLevel);
-  $('#route-best').textContent = best ? `最佳 ${best.score.toLocaleString()} 分 · 最快 ${formatTime(best.time)}${best.allEchoes ? ' · 微光全收集' : ''}` : '尚未探索 · 從這裡出發';
+  const summary = progress.getSummary(selectedLevel);
+  const best = summary.current;
+  if (best) {
+    $('#route-best').textContent = `新版最佳 ${best.score.toLocaleString()} 分 · 最快 ${formatTime(best.time)}${best.allEchoes ? ' · 微光全收集' : ''}`;
+  } else if (summary.historical && summary.routeUpdated) {
+    $('#route-best').textContent = `新版尚未挑戰 · 歷史最高 ${summary.historical.stars} 星（路線已更新）`;
+  } else if (summary.historical) {
+    $('#route-best').textContent = `最佳 ${summary.historical.score.toLocaleString()} 分 · 最快 ${formatTime(summary.historical.time)}${summary.historical.allEchoes ? ' · 微光全收集' : ''}`;
+  } else {
+    $('#route-best').textContent = '尚未探索 · 從這裡出發';
+  }
   const preview = $('#route-preview');
   const ctx = preview.getContext('2d');
   const size = Math.min((preview.width - 16) / level.width, (preview.height - 16) / level.height);
@@ -124,10 +141,11 @@ function startSelectedLevel() {
 function goHome() { game.stop(); updateRoutes(); showScreen('start'); }
 function nextLevelId(id) { return Object.keys(LEVELS)[Object.keys(LEVELS).indexOf(id) + 1] || null; }
 function recommendedRoute() {
-  return Object.keys(LEVELS).find((id) => !progress.get(id)) || Object.keys(LEVELS).find((id) => progress.get(id).stars < 3) || null;
+  return Object.keys(LEVELS).find((id) => !progress.getCurrent(id)) || Object.keys(LEVELS).find((id) => (progress.getCurrent(id)?.stars || 0) < 3) || null;
 }
 
 function showClear(result) {
+  const historicalBefore = progress.get(result.levelId);
   const best = progress.record(result);
   const supplyTotal = result.chocolateCount + result.drinkCount;
   $('#clear-subtitle').textContent = `${LEVELS[result.levelId].shortName} · 你在柔光裡找到了出口。`;
@@ -143,7 +161,17 @@ function showClear(result) {
   if (result.echoCount < result.totalEchoes) missing.push(`${result.totalEchoes - result.echoCount} 個微光`);
   if (supplyTotal < result.totalSupplies) missing.push(`${result.totalSupplies - supplyTotal} 份補給`);
   $('#clear-star-hint').textContent = result.stars === 3 ? '三星達成 · 出口、微光、補給全數完成' : `這次還差 ${missing.join('、')}。再挑戰一次，收齊就能三星！`;
-  $('#clear-best').textContent = `${best.isNewBest ? '✦ 新的最佳紀錄' : best.starsImproved ? '✦ 星數紀錄提升至 ' + best.stars + ' 星' : '個人最佳 ' + best.score.toLocaleString() + ' 分'} · 最快 ${formatTime(best.time)}`;
+  const isRevisedRoute = LEVELS[result.levelId].rulesVersion > 1;
+  const bestLabel = best.isFirstCompletion && isRevisedRoute && historicalBefore
+    ? '✦ 新版首次完成'
+    : best.isFirstCompletion
+      ? '✦ 新的最佳紀錄'
+      : best.isNewBest
+        ? '✦ 新版最佳紀錄'
+        : best.starsImproved
+          ? `✦ 星數紀錄提升至 ${best.stars} 星`
+          : '新版個人最佳';
+  $('#clear-best').textContent = `${bestLabel} · ${best.score.toLocaleString()} 分 · 最快 ${formatTime(best.time)}${isRevisedRoute && historicalBefore ? ' · 舊版紀錄保留，分版比較' : ''}`;
   const badges = ['出口發現'];
   if (result.beaconCount) badges.push(`${result.beaconCount} 座信標點亮`);
   if (!result.scansUsed) badges.push('無脈衝通關');
@@ -158,6 +186,72 @@ function showClear(result) {
   showScreen('clear');
 }
 
+function openConfirmation(kind, details = {}) {
+  if (pendingConfirmation) return;
+  const context = game.state === 'confirming' && game.confirmation?.kind === kind
+    ? { ...game.confirmation }
+    : game.beginConfirmation(kind);
+  if (!context) return;
+  pendingConfirmation = { kind, context, details };
+  pauseDialog.close();
+  const copy = {
+    exit: {
+      kicker: 'EXIT FOUND', title: '已找到出口！', accept: '現在通關', cancel: '繼續探索',
+      description: `還差 ${[
+        details.missingEchoes ? `${details.missingEchoes} 個微光` : '',
+        details.missingSupplies ? `${details.missingSupplies} 份補給` : ''
+      ].filter(Boolean).join('、')}即可完成全收集。`
+    },
+    restart: {
+      kicker: 'RESTART ROUTE', title: '重新開始本關？', cancel: '取消', accept: '重新開始',
+      description: '本次探索進度將重置，已儲存的歷史紀錄不受影響。'
+    },
+    leave: {
+      kicker: 'LEAVE ROUTE', title: '離開本局探索？', cancel: '繼續探索', accept: '回到關卡選擇',
+      description: '尚未結算的本局進度會暫停保留；離開後可重新挑戰，已儲存的歷史紀錄不受影響。'
+    }
+  }[kind];
+  $('#confirm-kicker').textContent = copy.kicker;
+  $('#confirm-title').textContent = copy.title;
+  $('#confirm-description').textContent = copy.description;
+  $('#confirm-cancel').textContent = copy.cancel;
+  $('#confirm-accept').textContent = copy.accept;
+  confirmDialog.showModal();
+  $('#confirm-cancel').focus({ preventScroll: true });
+}
+
+function finishConfirmation(accepted) {
+  if (!pendingConfirmation) return;
+  const pending = pendingConfirmation;
+  pendingConfirmation = null;
+  confirmDialog.close();
+  const context = game.resolveConfirmation(accepted);
+  if (!context) return;
+  if (!accepted) {
+    if (context.fromState === 'paused') pauseDialog.showModal();
+    else $('#game-canvas').focus({ preventScroll: true });
+    return;
+  }
+  if (pending.kind === 'exit') {
+    game.clear();
+  } else if (pending.kind === 'restart') {
+    game.restart();
+    $('#game-canvas').focus({ preventScroll: true });
+  } else if (pending.kind === 'leave') {
+    goHome();
+  }
+}
+
+function cancelConfirmation() { finishConfirmation(false); }
+function requestRestart() {
+  if (!screens.game.hidden) openConfirmation('restart');
+}
+function requestLeave() {
+  if (screens.game.hidden) { goHome(); return; }
+  if (['playing', 'paused'].includes(game.state)) openConfirmation('leave');
+  else goHome();
+}
+
 document.querySelectorAll('[data-chapter]').forEach((button) => button.addEventListener('click', () => {
   selectedLevel = Object.keys(LEVELS).find((id) => LEVELS[id].chapter === Number(button.dataset.chapter)); updateRoutes(); sound.click();
 }));
@@ -170,14 +264,17 @@ $('#continue-journey').addEventListener('click', () => {
   $('#start-button').focus({ preventScroll: true });
 });
 $('#start-button').addEventListener('click', startSelectedLevel);
-$('#game-restart').addEventListener('click', () => { game.restart(); $('#game-canvas').focus({ preventScroll: true }); });
 $('#retry-button').addEventListener('click', () => { selectedLevel = lastResult?.levelId || selectedLevel; startSelectedLevel(); });
 $('#next-level-button').addEventListener('click', () => { selectedLevel = nextLevelId(lastResult.levelId) || selectedLevel; startSelectedLevel(); });
-for (const id of ['#home-button', '#brand-home', '#pause-home']) $(id).addEventListener('click', goHome);
+$('#home-button').addEventListener('click', goHome);
+for (const id of ['#brand-home', '#pause-home']) $(id).addEventListener('click', requestLeave);
 $('#pause-button').addEventListener('click', () => game.togglePause());
 $('#resume-button').addEventListener('click', () => { game.setPaused(false); $('#game-canvas').focus({ preventScroll: true }); });
-$('#pause-restart').addEventListener('click', () => { game.restart(); $('#game-canvas').focus({ preventScroll: true }); });
-pauseDialog.addEventListener('cancel', (event) => { event.preventDefault(); game.setPaused(false); $('#game-canvas').focus({ preventScroll: true }); });
+$('#pause-restart').addEventListener('click', requestRestart);
+pauseDialog.addEventListener('cancel', (event) => { event.preventDefault(); if (game.state === 'paused') { game.setPaused(false); $('#game-canvas').focus({ preventScroll: true }); } });
+$('#confirm-cancel').addEventListener('click', cancelConfirmation);
+$('#confirm-accept').addEventListener('click', () => finishConfirmation(true));
+confirmDialog.addEventListener('cancel', (event) => { event.preventDefault(); cancelConfirmation(); });
 $('#camera-toggle').addEventListener('click', () => { game.toggleCamera(); updateCameraButton(); $('#game-canvas').focus({ preventScroll: true }); });
 
 const SOUND_KEY = 'jellyVisionMaze.sound.v1';

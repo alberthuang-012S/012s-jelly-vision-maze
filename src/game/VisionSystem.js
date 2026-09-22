@@ -24,22 +24,38 @@ export class VisionSystem {
   }
 
   collect(product) {
+    const wasObscured = this.obscuredRemaining > 0;
     this.obscuredRemaining = 0;
-    if (product.visionEffect === 'range') { this.boostRemaining = Math.max(this.boostRemaining, product.duration); this.weakRemaining = 0; this.boostRadius = product.strength; this.lastEffect = 'expanded'; }
+    if (product.visionEffect === 'range') {
+      this.boostRemaining = Math.max(this.boostRemaining, product.duration);
+      this.weakRemaining = 0;
+      this.boostRadius = product.strength;
+      this.lastEffect = 'expanded';
+    }
+    let effect = { type: 'expanded', radius: product.strength, duration: product.duration, added: 0, wasObscured };
     if (product.visionEffect === 'duration') {
-      if (this.boostRemaining > 0) { this.boostRemaining += product.duration; this.lastEffect = 'extended'; }
-      else { this.weakRemaining = Math.max(this.weakRemaining, product.duration); this.targetRadius = 4.5; this.lastEffect = 'extended'; }
+      if (this.boostRemaining > 0) {
+        this.boostRemaining += product.duration;
+        this.lastEffect = 'extended';
+        effect = { type: 'extended', radius: this.boostRadius, duration: this.boostRemaining, added: product.duration, wasObscured };
+      } else {
+        this.weakRemaining = Math.max(this.weakRemaining, product.duration);
+        this.targetRadius = 4.5;
+        this.lastEffect = 'extended';
+        effect = { type: 'weak', radius: 4.5, duration: product.duration, added: 0, wasObscured };
+      }
     }
     this.burst = 0.55;
     this.refreshRadius();
+    return effect;
   }
 
   getMeterPercent() { return Math.round(clamp(((this.currentRadius - this.normalRadius) / 3) * 70 + 30, 8, 100)); }
   getStatus() {
-    if (this.obscuredRemaining > 0) return { label: 'INK CLOUD', remaining: this.obscuredRemaining, radius: this.currentRadius };
-    if (this.boostRemaining > 0) return { label: 'VISION BOOST', remaining: this.boostRemaining, radius: this.currentRadius };
-    if (this.weakRemaining > 0) return { label: 'VISION EXTENDED', remaining: this.weakRemaining, radius: this.currentRadius };
-    return { label: 'NORMAL VISION', remaining: 0, radius: this.currentRadius };
+    if (this.obscuredRemaining > 0) return { label: '墨霧', remaining: this.obscuredRemaining, radius: this.currentRadius };
+    if (this.boostRemaining > 0) return { label: '視野擴大', remaining: this.boostRemaining, radius: this.currentRadius };
+    if (this.weakRemaining > 0) return { label: '視野延長', remaining: this.weakRemaining, radius: this.currentRadius };
+    return { label: '基本視野', remaining: 0, radius: this.currentRadius };
   }
 
   drawBurst(ctx, x, y, time) {

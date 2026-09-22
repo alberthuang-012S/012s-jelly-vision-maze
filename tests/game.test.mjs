@@ -210,9 +210,10 @@ const frames = new Map();
 let frameId = 0;
 globalThis.requestAnimationFrame = (callback) => { frames.set(++frameId, callback); return frameId; };
 globalThis.cancelAnimationFrame = (id) => frames.delete(id);
-function createGame() {
+function createGame(options = {}) {
   let result;
   const game = new Game({ canvas: { getContext: () => ({}) }, viewport: { style: { setProperty() {} }, getBoundingClientRect: () => ({ width: 900, height: 600 }) }, hud: { setLevel() {}, reset() {}, update() {}, showToast() {} }, onClear: (value) => { result = value; } });
+  Object.assign(game, options);
   game.render = () => {};
   game.input = { setEnabled() {}, getMovementVector: () => ({ x: 0, y: 0 }) };
   return { game, result: () => result };
@@ -314,6 +315,99 @@ test('expedition layout is repeatable and every pickup is distinct and reachable
   }
 });
 
+function walkGameTo(game, target) {
+  const from = game.maze.pointToCell(game.player.x, game.player.y);
+  for (const cell of route(game.maze, from, target)) {
+    const point = game.maze.cellCenter(cell.col, cell.row);
+    let steps = 0;
+    while (Math.hypot(game.player.x - point.x, game.player.y - point.y) > .001) {
+      assert.ok(steps++ < 120, `stuck before ${target.col},${target.row}`);
+      const dx = point.x - game.player.x, dy = point.y - game.player.y;
+      const distance = Math.hypot(dx, dy);
+      game.input.getMovementVector = () => ({ x: dx / distance, y: dy / distance });
+      game.update(Math.min(1 / 60, distance / game.player.speed));
+    }
+  }
+}
+
+test('authored tutorial routes create useful choices and a readable vision step', () => {
+  const first = LEVELS['level-1'];
+  const maze = new Maze(first);
+  assert.equal(first.hazards.traps.length + first.hazards.monsters.length, 0);
+  const branchCells = first.map.flatMap((row, rowIndex) => row.map((_, col) => ({ col, row: rowIndex })))
+    .filter((point) => !maze.isWall(point.col, point.row))
+    .filter((point) => [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dy]) => !maze.isWall(point.col + dx, point.row + dy)).length >= 3);
+  assert.ok(branchCells.length >= 2, 'the first route should include a real choice');
+
+  const chocolate = maze.cellCenter(first.supplies[0].col, first.supplies[0].row);
+  maze.updateVisibility(chocolate.x, chocolate.y, 3);
+  const normalVisibleWalkable = [...maze.visible].filter((key) => {
+    const [col, row] = key.split(',').map(Number);
+    return !maze.isWall(col, row);
+  }).length;
+  maze.updateVisibility(chocolate.x, chocolate.y, 6);
+  const expandedVisibleWalkable = [...maze.visible].filter((key) => {
+    const [col, row] = key.split(',').map(Number);
+    return !maze.isWall(col, row);
+  }).length;
+  assert.ok(expandedVisibleWalkable > normalVisibleWalkable, 'chocolate should reveal useful walkable information');
+  assert.equal(first.supplies.filter(({ type }) => type === 'chocolate').length, 1);
+  assert.equal(first.echoes.length, 3);
+});
+
+test('level 2 authored chocolate-to-drink route leaves timing margin', () => {
+  const { game } = createGame();
+  game.start('level-2');
+  walkGameTo(game, game.maze.level.supplies[0]);
+  assert.ok(game.vision.boostRemaining > 7.5, 'chocolate should start the eight-second boost');
+  const afterChocolate = game.elapsed;
+  walkGameTo(game, game.maze.level.supplies[1]);
+  assert.ok(game.elapsed - afterChocolate < 6, 'the demonstrated supply route should leave at least two seconds of margin');
+  assert.ok(game.vision.boostRemaining > 8, 'drink should extend the active expanded view');
+  game.stop();
+});
+
+test('level 1 authored echo segment keeps the eight-second chain window with margin', () => {
+  const { game } = createGame();
+  game.start('level-1');
+  walkGameTo(game, game.maze.level.echoes[0]);
+  const collectedAt = game.elapsed;
+  walkGameTo(game, game.maze.level.echoes[1]);
+  assert.equal(game.echoes.getStatus(game.elapsed).chain, 2);
+  assert.ok(game.elapsed - collectedAt < 6, 'the teaching segment should leave about two seconds of input margin');
+  game.stop();
+});
+
+test('level 3 offers a shorter risky branch and a longer hazard-free branch', () => {
+  const level = LEVELS['level-3'];
+  const maze = new Maze(level);
+  const hazardCells = new Set(level.hazards.traps.map(({ col, row }) => `${col},${row}`));
+  for (const monster of level.hazards.monsters) for (const point of monster.path) hazardCells.add(`${point.col},${point.row}`);
+  const pathLength = (from, to, blocked = new Set()) => {
+    const q = [{ ...from, distance: 0 }];
+    const seen = new Set([`${from.col},${from.row}`]);
+    for (const current of q) {
+      if (current.col === to.col && current.row === to.row) return current.distance;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const next = { col: current.col + dx, row: current.row + dy };
+        const key = `${next.col},${next.row}`;
+        if (maze.isWall(next.col, next.row) || blocked.has(key) || seen.has(key)) continue;
+        seen.add(key); q.push({ ...next, distance: current.distance + 1 });
+      }
+    }
+    return Infinity;
+  };
+  const short = level.routePlan.shortRisk;
+  const safe = level.routePlan.longSafe;
+  const shortLength = pathLength(short[0], short.at(-1));
+  const safeLength = pathLength(safe[0], safe.at(-1), hazardCells);
+  assert.ok(shortLength < safeLength, 'the risk route should be shorter');
+  assert.ok(Number.isFinite(safeLength), 'the safe route should avoid the full patrol and trap cells');
+  assert.ok(short.slice(1).some((point) => hazardCells.has(`${point.col},${point.row}`)), 'the short route should expose a meaningful danger choice');
+  assert.equal(level.supplies.length, 3);
+  assert.equal(level.echoes.length, 4);
+});
+
 test('pulse lights only the firing direction for exactly two seconds, with existing charges', () => {
   const maze = new Maze(LEVELS['level-4']);
   const player = { ...maze.cellCenter(11, 9), direction: { x: 1, y: 0 } };
@@ -413,6 +507,50 @@ test('old progress migrates without losing scores and stars never decrease', () 
   const loaded = new ProgressStore(storage).get('level-1');
   assert.equal(loaded.stars, 3); assert.equal(loaded.score, 2300); assert.equal(loaded.time, 40);
   assert.equal(new ProgressStore(storage).get('level-6'), null);
+});
+
+test('revised tutorial records stay separate while historical completion remains visible', () => {
+  let saved = JSON.stringify({
+    'level-1': { score: 2300, time: 40, allEchoes: true },
+    'level-4': { score: 1800, time: 50, stars: 2 }
+  });
+  const storage = { getItem: () => saved, setItem: (_, value) => { saved = value; } };
+  const store = new ProgressStore(storage);
+  assert.equal(store.getCurrent('level-1'), null);
+  assert.equal(store.getCurrent('level-4').score, 1800);
+  assert.equal(store.get('level-1').stars, 2);
+  const first = store.record({ levelId: 'level-1', rulesVersion: 2, score: 1600, time: 60, stars: 1, echoCount: 0, totalEchoes: 3 });
+  assert.equal(first.isFirstCompletion, true);
+  assert.equal(store.getCurrent('level-1').score, 1600);
+  assert.equal(store.get('level-1').score, 2300);
+  const beforeMigration = saved;
+  const migratedAgain = new ProgressStore(storage);
+  assert.deepEqual(migratedAgain.getCurrent('level-1'), store.getCurrent('level-1'));
+  assert.equal(JSON.parse(beforeMigration)['level-1'].versions['1'].score, 2300);
+  assert.deepEqual(Object.keys(JSON.parse(saved)['level-1'].versions).sort(), ['1', '2']);
+});
+
+test('partial exit enters one frozen confirmation and can be re-armed after leaving', () => {
+  let prompt;
+  const { game } = createGame({ onExitPrompt: (details) => { prompt = details; } });
+  game.start('level-1');
+  Object.assign(game.player, game.maze.cellCenter(game.maze.level.exit.col, game.maze.level.exit.row));
+  game.update(.1);
+  assert.equal(game.state, 'confirming');
+  assert.deepEqual(prompt, { missingEchoes: 3, missingSupplies: 1, levelId: 'level-1' });
+  const frozen = JSON.stringify([game.elapsed, game.vision, game.scan, game.hazards]);
+  game.update(10);
+  assert.equal(JSON.stringify([game.elapsed, game.vision, game.scan, game.hazards]), frozen);
+  game.resolveConfirmation(false);
+  assert.equal(game.state, 'playing');
+  game.update(.1);
+  assert.equal(game.state, 'playing');
+  Object.assign(game.player, game.maze.cellCenter(game.maze.level.start.col, game.maze.level.start.row));
+  game.update(.1);
+  Object.assign(game.player, game.maze.cellCenter(game.maze.level.exit.col, game.maze.level.exit.row));
+  game.update(.1);
+  assert.equal(game.state, 'confirming');
+  game.stop();
 });
 
 test('Q pulse shortcut ignores key repeat, modified shortcuts and paused input', () => {

@@ -10,7 +10,7 @@ import { BeaconSystem } from './BeaconSystem.js';
 import { HazardSystem } from './HazardSystem.js';
 
 export class Game {
-  constructor({ canvas, viewport, hud, onClear, onPickup, onEcho, onMove, onPause }) {
+  constructor({ canvas, viewport, hud, onClear, onPickup, onEcho, onMove, onPause, onExitPrompt }) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.viewport = viewport;
@@ -20,6 +20,7 @@ export class Game {
     this.onEcho = onEcho;
     this.onMove = onMove;
     this.onPause = onPause;
+    this.onExitPrompt = onExitPrompt;
     this.follow = window.matchMedia('(max-width: 640px)').matches;
     this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
     this.input = null;
@@ -40,6 +41,7 @@ export class Game {
   setInput(input) { this.input = input; }
 
   start(levelId = 'level-1') {
+    cancelAnimationFrame(this.frameId);
     this.levelId = LEVELS[levelId] ? levelId : 'level-1';
     const level = LEVELS[this.levelId];
     this.maze = new Maze(level);
@@ -53,6 +55,8 @@ export class Game {
     this.beacons = new BeaconSystem(level, this.maze);
     this.hazards = new HazardSystem(level, this.maze);
     this.exitHintShown = false;
+    this.exitPromptArmed = true;
+    this.confirmation = null;
     this.elapsed = 0;
     this.echoScore = 0;
     this.echoPulse = null;
@@ -75,6 +79,7 @@ export class Game {
 
   stop() {
     this.state = 'idle';
+    this.confirmation = null;
     this.input?.setEnabled(false);
     cancelAnimationFrame(this.frameId);
     this.onPause?.(false);
@@ -94,13 +99,43 @@ export class Game {
 
   togglePause() { this.setPaused(this.state === 'playing'); }
 
+  beginConfirmation(kind) {
+    if (!['playing', 'paused'].includes(this.state) || this.confirmation) return null;
+    const fromState = this.state;
+    this.confirmation = { kind, fromState };
+    this.state = 'confirming';
+    this.input?.setEnabled(false);
+    cancelAnimationFrame(this.frameId);
+    return { ...this.confirmation };
+  }
+
+  resolveConfirmation(accepted) {
+    if (this.state !== 'confirming' || !this.confirmation) return null;
+    const context = this.confirmation;
+    this.confirmation = null;
+    if (!accepted) {
+      this.state = context.fromState;
+      this.input?.setEnabled(context.fromState === 'playing');
+      if (context.fromState === 'playing') {
+        this.lastFrame = performance.now();
+        this.frameId = requestAnimationFrame(this.boundLoop);
+      }
+    } else {
+      // The caller immediately chooses the follow-up action (clear, restart,
+      // or leave), so there is intentionally no second animation loop here.
+      this.state = 'playing';
+      this.input?.setEnabled(true);
+    }
+    return context;
+  }
+
   useScan() {
     if (this.state !== 'playing') return false;
     const activated = this.scan.activate(this.maze, this.player);
     if (activated) {
       this.maze.updatePulseVisibility(this.scan);
       const affected = this.hazards.applyPulse(this.scan);
-      this.hud.showToast(affected ? `前方照亮 2 秒 · 壓制 ${affected} 處危險` : '前方脈衝 · 照亮 2 秒');
+      this.hud.showToast(affected ? `前方脈衝 · 照亮 2 秒 · 壓制 ${affected} 處危險` : '前方脈衝 · 照亮 2 秒', { priority: 1 });
       this.onEcho?.(1);
     } else if (!this.scan.charges) this.hud.showToast('脈衝已用完 · 找到微光或信標可補充');
     this.updateHUD();
@@ -133,6 +168,7 @@ export class Game {
   }
 
   update(dt) {
+    if (this.state !== 'playing') return;
     this.elapsed += dt;
     const movement = this.input?.getMovementVector() || { x: 0, y: 0 };
     const oldX = this.player.x;
@@ -148,19 +184,25 @@ export class Game {
       ? (this.echoPulse.life > dt ? { ...this.echoPulse, life: this.echoPulse.life - dt } : null)
       : null;
 
+    const supplyMessages = [];
     this.supplies.collectNearby(this.player, (product) => {
-      const obscured = this.vision.obscuredRemaining > 0;
-      this.vision.collect(product);
-      this.hud.showToast(obscured ? '墨霧已清除 · 補給生效' : product.visionEffect === 'range' ? 'VISION EXPANDED' : 'VISION EXTENDED');
+      const effect = this.vision.collect(product);
+      const radius = Number.isInteger(effect.radius) ? effect.radius : effect.radius.toFixed(1);
+      const duration = Math.round(effect.duration);
+      const message = effect.type === 'extended'
+        ? `擴大視野延長 ＋${effect.added} 秒`
+        : `視野擴至 ${radius} 格 · ${duration} 秒`;
+      supplyMessages.push(effect.wasObscured ? `墨霧已清除 · ${message}` : message);
       this.onPickup?.(product.id.split('-')[0]);
     });
+    if (supplyMessages.length) this.hud.showToast(supplyMessages.join('；'), { priority: 3, duration: 2400 });
     this.echoes.collectNearby(this.player, this.elapsed, (echo, chain) => {
       const points = 80 + chain * 40;
       this.echoScore += points;
       this.scan.recharge();
       this.maze.revealAround(echo.x, echo.y, 2.7);
       this.echoPulse = { x: echo.x, y: echo.y, life: 0.75, maxLife: 0.75 };
-      this.hud.showToast(`ECHO CHAIN ×${chain} · +${points}`);
+      this.hud.showToast(`微光連鎖 ×${chain} · +${points}`);
       this.onEcho?.(chain);
     });
     this.beacons.collectNearby(this.player, (beacon, complete) => {
@@ -172,9 +214,25 @@ export class Game {
 
     this.updateHUD();
     if (this.isAtExit()) {
-      if (this.beacons.isComplete()) this.clear();
-      else if (!this.exitHintShown) { this.hud.showToast('出口尚未開啟 · 先點亮所有信標'); this.exitHintShown = true; }
-    } else this.exitHintShown = false;
+      if (!this.beacons.isComplete()) {
+        if (!this.exitHintShown) { this.hud.showToast('出口尚未開啟 · 先點亮所有信標', { priority: 1 }); this.exitHintShown = true; }
+      } else if (this.isCollectionComplete()) {
+        this.clear();
+      } else if (this.exitPromptArmed) {
+        this.exitPromptArmed = false;
+        // Headless integrations may not provide a dialog renderer. The browser
+        // runtime always does, while the fallback keeps the core simulation
+        // usable for non-UI callers.
+        if (this.onExitPrompt) {
+          if (this.beginConfirmation('exit')) this.onExitPrompt(this.getExitDetails());
+        } else {
+          this.clear();
+        }
+      }
+    } else {
+      this.exitHintShown = false;
+      this.exitPromptArmed = true;
+    }
   }
 
   updateHUD() {
@@ -196,10 +254,22 @@ export class Game {
     return Math.hypot(this.player.x - exit.x, this.player.y - exit.y) < this.maze.tileSize * 0.34;
   }
 
+  isCollectionComplete() {
+    return this.supplies.getCollectedTotal() === this.supplies.getTotal()
+      && this.echoes.getCollectedTotal() === this.echoes.getTotal();
+  }
+
+  getExitDetails() {
+    const missingEchoes = this.echoes.getTotal() - this.echoes.getCollectedTotal();
+    const missingSupplies = this.supplies.getTotal() - this.supplies.getCollectedTotal();
+    return { missingEchoes, missingSupplies, levelId: this.levelId };
+  }
+
   clear() {
     if (this.state !== 'playing' || !this.beacons.isComplete()) return;
     this.state = 'clear';
     this.input?.setEnabled(false);
+    cancelAnimationFrame(this.frameId);
     const level = LEVELS[this.levelId];
     const timeBonus = Math.max(0, Math.round((Math.max(0, level.timeBudget - this.elapsed) / level.timeBudget) * 420));
     const supplyBonus = this.supplies.getCollectedTotal() * 100;
@@ -210,6 +280,7 @@ export class Game {
     const allSupplies = this.supplies.getCollectedTotal() === this.supplies.getTotal();
     this.onClear?.({
       levelId: this.levelId,
+      rulesVersion: level.rulesVersion,
       time: this.elapsed,
       exploration: this.maze.getExplorationRate(),
       chocolateCount: this.supplies.collected.chocolate,

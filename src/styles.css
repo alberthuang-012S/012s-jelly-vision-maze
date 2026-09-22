@@ -372,3 +372,119 @@ kbd { padding: 2px 5px; color: var(--ice); background: rgba(219, 233, 255, 0.1);
 .guide-content .guide-reassurance { color: var(--mint); border-top: 1px solid var(--line); padding-top: 10px; }
 .continue-journey { display: block; width: 100%; margin-top: 11px; padding: 8px 0; color: var(--mint); background: transparent; border: 0; text-align: left; cursor: pointer; font-size: 11px; }
 .continue-journey:hover { color: var(--cream); }
+
+/* Core experience layout: the game scene gets the available viewport, while
+   the home and result screens remain ordinary scrollable documents. */
+.app-shell { overflow-x: clip; overflow-y: visible; }
+body.game-active { overflow: hidden; }
+.game-screen { display: flex; flex-direction: column; min-height: calc(100dvh - 79px); padding-bottom: max(18px, env(safe-area-inset-bottom, 0px)); }
+.game-header { grid-template-columns: minmax(150px, .8fr) minmax(180px, 1fr) auto; gap: 16px; min-height: 54px; }
+.game-header-title { min-width: 0; display: flex; align-items: center; gap: 9px; }
+.game-header-title > span:last-child { display: grid; gap: 4px; min-width: 0; }
+.game-header-title strong { color: var(--cream); font: 600 14px/1.1 'Noto Sans TC', sans-serif; white-space: nowrap; }
+.game-header-title small { color: var(--muted); font: 10px/1 'Noto Sans TC', sans-serif; white-space: nowrap; }
+.game-objective { display: grid; gap: 4px; min-width: 0; color: var(--muted); }
+.game-objective span { font: 9px 'DM Mono', monospace; letter-spacing: .14em; }
+.game-objective strong { overflow: hidden; color: var(--gold); font: 500 13px/1.2 'Noto Sans TC', sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.game-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.game-header-actions .ghost-button { min-height: 38px; white-space: nowrap; }
+.game-viewport { height: clamp(280px, calc(100dvh - 378px), 660px); aspect-ratio: auto; }
+.stage-toolbar { min-height: 34px; margin: 3px 0 8px; }
+.stage-toolbar .game-tip { min-width: 0; overflow: hidden; color: #b6c9e5; font-size: 12px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.compact-status { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 10px; overflow: hidden; background: var(--line); border: 1px solid var(--line); border-radius: 12px; }
+.compact-status > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; min-height: 43px; padding: 9px 12px; background: #0c2037; }
+.compact-status span { color: var(--muted); font: 10px 'Noto Sans TC', sans-serif; white-space: nowrap; }
+.compact-status strong { min-width: 0; overflow: hidden; color: var(--ice); font: 500 11px 'Noto Sans TC', sans-serif; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.compact-status strong.is-active { color: var(--gold); }
+.compact-status strong.is-danger { color: #f292bc; }
+.exploration-info { margin-top: 9px; border: 1px solid var(--line); border-radius: 11px; background: rgba(11, 30, 51, .6); }
+.exploration-info:not([open]) > .exploration-info-content { display: none; }
+.exploration-info summary { display: flex; align-items: center; justify-content: space-between; min-height: 34px; padding: 7px 11px; color: var(--ice); cursor: pointer; font: 11px 'Noto Sans TC', sans-serif; list-style: none; }
+.exploration-info summary::-webkit-details-marker { display: none; }
+.exploration-info summary > span { color: var(--mint); font-size: 17px; line-height: 1; transition: transform 160ms ease; }
+.exploration-info[open] summary > span { transform: rotate(45deg); }
+.exploration-info-content { padding: 0 11px 10px; }
+.info-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding-top: 5px; }
+.info-stats > div { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 7px 0 9px; color: var(--muted); font-size: 10px; }
+.info-stats strong { color: var(--ice); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mini-meter { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; overflow: hidden; background: #233952; }
+.mini-meter > i { display: block; width: 0; height: 100%; background: var(--mint); transition: width 150ms linear; }
+#exploration-fill { background: var(--blue-bright); }
+.exploration-info .stage-legend { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid var(--line); }
+.game-help { display: grid; gap: 6px; margin-top: 10px; padding-top: 9px; border-top: 1px solid var(--line); }
+.game-help p { margin: 0; color: var(--muted); font: 11px/1.65 'Noto Sans TC', sans-serif; }
+.game-help strong { color: var(--cream); font-weight: 500; }
+.game-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 10px; padding-top: 0; border-top: 0; }
+.game-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin-left: auto; }
+.game-actions .scan-button { min-height: 48px; color: #d8edb9; border-color: #6b8558; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.touch-controls { display: none; }
+.confirm-dialog { width: min(440px, calc(100% - 32px)); padding: 32px; color: var(--cream); border: 1px solid #547aa0; border-radius: 24px; background: radial-gradient(circle at top, #1c3e66, #0a1b2f 80%); box-shadow: 0 24px 100px #0009; }
+.confirm-dialog::backdrop { background: #020b19bf; backdrop-filter: blur(8px); }
+.confirm-dialog h2 { margin: 15px 0 12px; font-size: clamp(23px, 5vw, 29px); letter-spacing: -.04em; }
+.confirm-dialog p { color: #b8c9e4; font-size: 14px; line-height: 1.8; }
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 23px; }
+.confirm-actions .primary-button, .confirm-actions .secondary-button { justify-content: center; min-width: 0; padding-inline: 10px; }
+
+@media (max-width: 640px) {
+  .topbar { min-height: 56px; }
+  .game-screen { min-height: calc(100dvh - 56px); height: calc(100dvh - 56px); padding-top: 8px; padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)); overflow: hidden; }
+  .game-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title actions' 'objective objective'; gap: 6px 8px; min-height: 0; }
+  .game-header-title { grid-area: title; }
+  .game-header-title strong { font-size: 13px; }
+  .game-header-actions { grid-area: actions; gap: 6px; }
+  .game-header-actions .ghost-button { min-height: 34px; padding: 6px 8px; font-size: 10px; }
+  .game-objective { grid-area: objective; display: flex; align-items: baseline; gap: 7px; min-height: 20px; }
+  .game-objective span { font-size: 8px; }
+  .game-objective strong { font-size: 11px; }
+  .vision-readout { gap: 5px; }
+  .vision-readout > span { display: none; }
+  .vision-meter { width: 45px; height: 5px; }
+  .vision-readout strong { min-width: 0; color: var(--ice); font-size: 9px; }
+  .time-readout { display: grid; gap: 1px; text-align: right; }
+  .time-readout span { font-size: 8px; letter-spacing: .08em; }
+  .time-readout strong { font-size: 11px; }
+  .game-stage-wrap { margin-top: 2px; }
+  .stage-toolbar { min-height: 27px; margin: 3px 0 5px; gap: 6px; }
+  .stage-toolbar .game-tip { font-size: 10px; }
+  .stage-toolbar .ghost-button { min-height: 30px; padding: 5px 8px; font-size: 10px; }
+  .game-viewport { height: clamp(280px, calc(100dvh - 365px), 440px); border-radius: 12px; }
+  .compact-status { grid-template-columns: repeat(4, 1fr); margin-top: 5px; border-radius: 9px; }
+  .compact-status > div { flex-direction: column; align-items: flex-start; justify-content: center; gap: 2px; min-height: 35px; padding: 5px 6px; }
+  .compact-status span { font-size: 9px; }
+  .compact-status strong { width: 100%; font-size: 9px; }
+  .exploration-info { margin-top: 4px; border-radius: 9px; }
+  .exploration-info summary { min-height: 27px; padding: 4px 8px; font-size: 10px; }
+  .exploration-info summary > span { font-size: 15px; }
+  .exploration-info-content { padding: 0 8px 7px; }
+  .exploration-info .stage-legend { gap: 6px 10px; font-size: 8px; }
+  .game-help p { font-size: 10px; }
+  .game-footer { min-height: 101px; margin-top: 4px; gap: 8px; }
+  .touch-controls { display: flex; align-items: center; }
+  .dpad { display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(2, 48px); gap: 4px; }
+  .dpad button { width: 48px; height: 48px; min-width: 48px; min-height: 48px; padding: 0; color: var(--ice); background: rgba(17, 43, 76, .92); border: 1px solid rgba(164, 198, 255, .25); border-radius: 11px; font-size: 21px; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .dpad button[data-dir='up'] { grid-column: 2; grid-row: 1; }
+  .dpad button[data-dir='left'] { grid-column: 1; grid-row: 2; }
+  .dpad button[data-dir='right'] { grid-column: 3; grid-row: 2; }
+  .dpad button[data-dir='down'] { grid-column: 2; grid-row: 2; }
+  .dpad button.is-pressed, .dpad button:active { color: var(--ink-deep); background: var(--gold); transform: scale(.96); }
+  .game-actions { margin-left: auto; }
+  .game-actions .scan-button { min-width: 76px; min-height: 64px; padding: 7px 8px; font-size: 11px; white-space: normal; }
+  .pause-dialog, .confirm-dialog { padding: 25px 20px; }
+}
+
+@media (orientation: landscape) and (max-height: 600px) and (max-width: 900px) {
+  .topbar { min-height: 52px; }
+  .game-screen { display: grid; grid-template-columns: minmax(0, 1fr) 160px; grid-template-rows: auto minmax(0, 1fr); grid-template-areas: 'header header' 'stage footer'; gap: 5px 10px; min-height: calc(100dvh - 52px); height: calc(100dvh - 52px); padding-top: 5px; overflow: hidden; }
+  .game-header { grid-area: header; grid-template-columns: minmax(140px, .8fr) minmax(170px, 1fr) auto; gap: 10px; }
+  .game-header-actions { gap: 7px; }
+  .game-stage-wrap { grid-area: stage; min-width: 0; margin-top: 0; }
+  .game-viewport { height: calc(100dvh - 167px); min-height: 210px; }
+  .compact-status > div { min-height: 31px; padding-block: 5px; }
+  .compact-status strong { font-size: 9px; }
+  .exploration-info { margin-top: 4px; }
+  .exploration-info summary { min-height: 25px; padding-block: 3px; }
+  .game-footer { grid-area: footer; min-width: 152px; min-height: 0; flex-direction: column; align-items: stretch; justify-content: center; margin: 0; gap: 12px; }
+  .touch-controls { display: flex; align-items: center; justify-content: center; margin-top: 0; padding-bottom: 0; }
+  .game-actions { justify-content: center; margin-left: 0; }
+  .game-actions .scan-button { min-height: 64px; }
+}

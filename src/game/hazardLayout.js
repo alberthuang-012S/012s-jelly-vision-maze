@@ -3,6 +3,15 @@ export function createHazardLayout(level) {
   const number = Number(level.number);
   const traps = [], monsters = [];
   if (number < 2) return { traps, monsters };
+  // Tutorial routes use authored encounters so the learning route stays safe
+  // until the player has had a chance to understand the new choice.
+  // Expedition routes intentionally keep the original deterministic layout.
+  if (level.hazardPlan && number <= 3) {
+    return {
+      traps: level.hazardPlan.traps.map((trap) => ({ ...trap })),
+      monsters: level.hazardPlan.monsters.map((monster) => ({ path: monster.path.map((point) => ({ ...point })) }))
+    };
+  }
   const distance = (a, b) => Math.abs(a.col - b.col) + Math.abs(a.row - b.row);
   const objectives = [level.exit, ...level.supplies, ...level.echoes, ...level.beacons];
   const reserved = [];
