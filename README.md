@@ -48,6 +48,12 @@ The expedition routes use fixed seeds to create repeatable branching mazes with 
 
 Normal vision has a three-cell radius. Chocolate expands it to six cells for eight seconds. A drink adds eight seconds to an active chocolate boost, or provides a weaker 4.5-cell view for eight seconds. Explored cells retain a quiet memory trace. Exploration percentage counts walkable cells only.
 
+Exploration memory is intentionally split into three meanings: exposed terrain is what normal vision or an active pulse has revealed; visited cells are only the walkable cells Jelly has physically entered; and discovered supplies are remembered only after the object itself was visible. The folded `探索資訊／玩法說明` panel explains these layers and includes a `顯示探索記憶` toggle. Footprints, landmark memories, and undiscovered-supply markers exist only for the current run, are reset on restart/leave, and never become a saved percentage or score. Collecting a remembered supply removes its marker.
+
+Routes 1–3 each include exactly two fixed, non-colliding orientation landmarks. They are small thematic scene cues rather than pickups or collision geometry: flower bed / plant border on route 1, water ripple / stone bank on route 2, and crystal cluster / cracked pillar on route 3. Routes 4–6 keep `landmarks: []` and their map/object/hazard data unchanged. A landmark or supply can enter discovery memory only while it is currently visible through normal vision or the active pulse cone.
+
+The route selector uses a thematic abstract preview until the selected route has been completed under its current `rulesVersion`; only then does it expose the full map preview. Historical completion records remain visible, but an old-version record does not unlock a revised route preview.
+
 Route 1 remains a safe tutorial. Routes 2–6 add 2/3/4/4/4 ink traps, and routes 3–6 add 1/1/2/3 shadow creatures. Traps repeat a six-second cycle: 3.2 seconds resting, 0.8 seconds of gold warning, then two seconds of ink. Creatures patrol fixed connected corridors at 0.85 cells/second, much slower than Jelly. Hazards stay away from the spawn, exit, and pickups. Contact reduces vision to 1.65 cells for three seconds and grants five seconds of protection from that hit; it cannot stack. Supplies clear ink immediately. Existing boost timers continue and any remaining boost returns after ink expires. Ink never erases exploration or removes stars.
 
 At firing time, Q seals traps in its cone for four seconds and stuns creatures for three seconds, alongside its two-second illumination. This works through walls like the light cone. The HUD shows ink/protection countdowns; dashed rings indicate protection. Only currently visible creatures are drawn, while explored traps keep a muted location marker. Pause freezes all hazard timers and patrols; restart resets them. Follow mode never zooms closer than its normal vision framing during ink. Clearing a hazard route without contact earns an extra result badge.
@@ -58,14 +64,14 @@ ECHOs are optional pickups with an eight-second chain window: each awards `80 + 
 
 Each run earns one star for clearing, one for every ECHO, and one for every supply. Best stars, best score, fastest clear, and ECHO completion persist independently per route in this browser. Three stars require both collections in the same run. The journal shows completed routes and up to 18 stars. Progress is versioned per route: old records for revised routes 1–3 remain in history, while current best score/time/stars are compared only within the active rules version. Existing flat v1 records migrate without clearing `localStorage`; blocked storage falls back to session memory.
 
-The active game screen is intentionally compact on phones: the maze keeps at least 420px at 390×844, 300px at 375×667, and 280px at 360×640. Movement buttons are at least 48px, the pulse button is 64px high, and landscape phones move controls into a side rail so the maze remains the primary surface. Extra legend and explanation text is collapsed under “探索資訊／玩法說明”. Pause, restart, leave, and partial-exit dialogs stop timers and input while they are open.
+The active game screen is intentionally compact on phones: the maze keeps at least 420px at 390×844, 300px at 375×667, and 280px at 360×640. Movement buttons are at least 48px, the pulse button is 64px high, and landscape phones move controls into a side rail so the maze remains the primary surface. Extra legend and explanation text is collapsed under “探索資訊／玩法說明”. Opening that panel pauses the run silently so the canvas remains readable without a modal; closing it resumes the same run. Pause, restart, leave, and partial-exit dialogs stop timers and input while they are open. Leaving before a result is settled does not retain mid-run exploration memory or progress; saved historical records are unaffected.
 
 ## Implementation
 
 - `Game.js`: scene lifecycle, pause, scoring, and rendering.
 - `levelConfig.js` / `expeditionLevels.js`: campaign data and deterministic expedition layouts.
-- `Maze.js` / `Player.js` / `Camera.js`: collision, exploration memory, movement, and adaptive camera.
-- `VisionSystem.js` / `SupplySystem.js` / `EchoSystem.js`: temporary vision, pickups, and chains.
+- `Maze.js` / `Player.js` / `Camera.js`: collision, exposed/visited memory, movement, and adaptive camera.
+- `VisionSystem.js` / `SupplySystem.js` / `LandmarkSystem.js` / `EchoSystem.js`: temporary vision, discovery memory, orientation landmarks, pickups, and chains.
 - `BeaconSystem.js`: activation, exit locks, and beacon rendering.
 - `HazardSystem.js` / `hazardLayout.js`: deterministic encounters, trap warnings, patrols, pulse suppression, and contact protection.
 - `ScanSystem.js`: directional illumination, two-second lifetime, charges, cooldown, and pulse rendering.
@@ -80,7 +86,7 @@ npm test
 npm run build
 ```
 
-The 38 regression tests cover real movement through all six routes with full collections and scoring, collision, pause/restart/input cleanup, camera bounds, illuminated-area framing across aspect ratios and directions, smooth return zoom, exploration, vision expiry, ECHO chains, repeatable layouts, authored route branches, locked exits, partial-exit confirmation, pulse direction/visibility/recharge/expiry, keyboard shortcuts, versioned storage migration, hazard placement, patrol collision, trap warnings, ink recovery and protection, pulse suppression, and frozen hazard timers on pause. Browser checks cover desktop, 390×844, 375×667, 360×640, and landscape mobile game layout and controls.
+The 43 regression tests cover real movement through all six routes with full collections and scoring, collision, pause/restart/input cleanup, camera bounds, illuminated-area framing across aspect ratios and directions, smooth return zoom, exposed-versus-visited memory, object discovery through normal vision and pulse, fixed landmark placement, exploration, vision expiry, ECHO chains, repeatable layouts, authored route branches, locked exits, partial-exit confirmation, pulse direction/visibility/recharge/expiry, keyboard shortcuts, versioned storage migration, hazard placement, patrol collision, trap warnings, ink recovery and protection, pulse suppression, and frozen hazard timers on pause. Browser checks cover 360×640, 375×667, 390×844, 430×932, 844×390, and 1366×768, including the silent-pausing exploration panel, memory legend/toggle, route preview state, and visible pulse/canvas behavior.
 
 The build validates every runtime module's syntax and relative imports, map widths, and the reachability of exits, supplies, ECHOs, and beacons. It runs tests before writing `dist/`. GitHub Pages deploys that validated directory; running the build does not publish it.
 

@@ -14,6 +14,8 @@ import { ScanSystem } from '../src/game/ScanSystem.js';
 import { createExpedition } from '../src/game/expeditionLevels.js';
 import { createHazardLayout } from '../src/game/hazardLayout.js';
 import { HazardSystem } from '../src/game/HazardSystem.js';
+import { SupplySystem } from '../src/game/SupplySystem.js';
+import { LandmarkSystem } from '../src/game/LandmarkSystem.js';
 
 function route(maze, from, to, avoidExit = false) {
   const key = (p) => `${p.col},${p.row}`;
@@ -41,6 +43,88 @@ test('exploration excludes walls, is monotonic, and reaches 100 only at completi
   maze.revealAround(200, 200, 100);
   assert.equal(maze.getExplorationRate(), 100);
   assert.equal(maze.exploredWalkable, maze.walkableCount);
+});
+
+test('visited is a separate exposed-walkable record', () => {
+  const level = LEVELS['level-1'];
+  const maze = new Maze(level);
+  const start = maze.cellCenter(level.start.col, level.start.row);
+  const supply = maze.cellCenter(level.supplies[0].col, level.supplies[0].row);
+  maze.updateVisibility(start.x, start.y, 3);
+  assert.equal(maze.visitPoint(start.x, start.y), true);
+  assert.equal(maze.visited.size, 1);
+  assert.equal(maze.visit(level.start.col, level.start.row), false);
+  assert.equal(maze.visit(level.start.col, level.start.row - 1), false);
+  assert.equal(maze.visitPoint(supply.x, supply.y), false, 'revealing is not walking');
+  maze.revealAround(supply.x, supply.y, 3);
+  assert.equal(maze.visitPoint(supply.x, supply.y), true);
+  assert.ok([...maze.visited].every((key) => {
+    const [col, row] = key.split(',').map(Number);
+    return !maze.isWall(col, row) && maze.isCellExplored(col, row);
+  }));
+});
+
+test('supply discovery requires current visibility, including a pulse, and is per object', () => {
+  const level = LEVELS['level-2'];
+  const maze = new Maze(level);
+  const supplies = new SupplySystem(level, maze);
+  const start = maze.cellCenter(level.start.col, level.start.row);
+  maze.updateVisibility(start.x, start.y, 3);
+  supplies.updateDiscovery();
+  assert.equal(supplies.supplies.every((supply) => !supply.discovered), true);
+
+  const first = supplies.supplies[0];
+  maze.revealAround(first.x, first.y, 3);
+  supplies.updateDiscovery();
+  assert.equal(first.discovered, false, 'terrain reveal alone is not an object discovery');
+  maze.updateVisibility(first.x, first.y, 3);
+  supplies.updateDiscovery();
+  assert.equal(first.discovered, true);
+  assert.equal(supplies.supplies[1].discovered, false);
+
+  const pulseMaze = new Maze(level);
+  const pulseSupplies = new SupplySystem(level, pulseMaze);
+  const origin = pulseMaze.cellCenter(11, 13);
+  pulseMaze.updateVisibility(origin.x, origin.y, 1);
+  const scan = new ScanSystem();
+  scan.activate(pulseMaze, { ...origin, direction: { x: 0, y: -1 } });
+  pulseMaze.updatePulseVisibility(scan);
+  pulseSupplies.updateDiscovery();
+  assert.equal(pulseSupplies.supplies[1].discovered, true, 'a visible pulse can discover a drink');
+  const charges = scan.charges;
+  pulseSupplies.collectNearby(pulseSupplies.supplies[1], () => {});
+  assert.equal(pulseSupplies.supplies[1].active, false);
+  assert.equal(scan.charges, charges, 'discovery and collection do not change pulse charges');
+});
+
+test('first three routes use two non-colliding fixed landmarks and expeditions stay empty', () => {
+  for (const [id, level] of Object.entries(LEVELS)) {
+    const maze = new Maze(level);
+    if (level.chapter === 1) {
+      assert.equal(level.landmarks.length, 2);
+      const occupied = new Set([level.start, level.exit, ...level.supplies, ...level.echoes, ...level.beacons, ...level.hazards.traps, ...level.hazards.monsters.flatMap((monster) => monster.path)].map(({ col, row }) => `${col},${row}`));
+      assert.equal(new Set(level.landmarks.map(({ id }) => id)).size, level.landmarks.length);
+      for (const landmark of level.landmarks) {
+        assert.equal(maze.isWall(landmark.col, landmark.row), false);
+        assert.equal(occupied.has(`${landmark.col},${landmark.row}`), false);
+        assert.ok(landmark.footprint.width > 0 && landmark.footprint.height > 0);
+      }
+    } else {
+      assert.deepEqual(level.landmarks, []);
+    }
+  }
+  const level = LEVELS['level-1'];
+  const maze = new Maze(level);
+  const landmarks = new LandmarkSystem(level, maze);
+  const start = maze.cellCenter(level.start.col, level.start.row);
+  maze.updateVisibility(start.x, start.y, 3);
+  landmarks.updateDiscovery();
+  assert.equal(landmarks.landmarks.some((landmark) => landmark.discovered), false);
+  const first = landmarks.landmarks[0];
+  const point = maze.cellCenter(first.col, first.row);
+  maze.updateVisibility(point.x, point.y, 3);
+  landmarks.updateDiscovery();
+  assert.equal(first.discovered, true);
 });
 
 test('vision drink extends a boost and all effects return smoothly to normal', () => {
@@ -329,6 +413,54 @@ function walkGameTo(game, target) {
     }
   }
 }
+
+test('game records real visited cells without changing for reveal, pause, camera, or memory toggle', () => {
+  const { game } = createGame();
+  game.start('level-1');
+  assert.equal(game.maze.visited.size, 1);
+  const startKey = `${game.maze.level.start.col},${game.maze.level.start.row}`;
+  assert.equal(game.maze.visited.has(startKey), true);
+
+  game.input.getMovementVector = () => ({ x: -1, y: 0 });
+  game.update(.2);
+  assert.equal(game.maze.visited.size, 1, 'a blocked direction does not create a footprint');
+  game.useScan();
+  game.maze.revealAround(game.maze.level.exit.col * game.maze.tileSize, game.maze.level.exit.row * game.maze.tileSize, 6);
+  assert.equal(game.maze.visited.size, 1, 'pulse and reveal do not create footprints');
+
+  walkGameTo(game, { col: 3, row: 1 });
+  const visitedAfterWalk = game.maze.visited.size;
+  assert.ok(visitedAfterWalk > 1);
+  assert.equal(game.maze.visit(3, 1), false, 'revisiting a cell is idempotent');
+  game.setExplorationMemory(false);
+  game.setExplorationMemory(true);
+  game.toggleCamera();
+  assert.equal(game.maze.visited.size, visitedAfterWalk);
+
+  const elapsed = game.elapsed;
+  game.setPaused(true);
+  game.update(2);
+  assert.equal(game.elapsed, elapsed, 'paused updates do not create time or footprints');
+  game.setPaused(false);
+  game.restart();
+  assert.equal(game.maze.visited.size, 1, 'restart clears the prior visited set');
+  game.stop();
+});
+
+test('pulse discovery is committed before an immediate pause', () => {
+  const { game } = createGame();
+  game.start('level-2');
+  const drink = game.supplies.supplies[1];
+  Object.assign(game.player, game.maze.cellCenter(11, 13), { direction: { x: 0, y: -1 } });
+  game.update(0);
+  assert.equal(drink.discovered, false);
+  assert.equal(game.useScan(), true);
+  assert.equal(drink.discovered, true);
+  game.setPaused(true);
+  game.update(10);
+  assert.equal(drink.discovered, true);
+  game.stop();
+});
 
 test('authored tutorial routes create useful choices and a readable vision step', () => {
   const first = LEVELS['level-1'];

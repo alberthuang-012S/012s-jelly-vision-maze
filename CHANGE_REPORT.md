@@ -1,4 +1,4 @@
-# Jelly Vision Maze｜核心體驗優化變更報告
+# Jelly Vision Maze｜核心體驗與探索辨識優化變更報告
 
 ## Scope
 
@@ -31,3 +31,39 @@ Routes 4–6 keep their existing generated maps, seeds, beacon requirements, sup
 
 - No physical-device session was available; mobile validation used browser viewport emulation and DOM geometry checks.
 - Existing local services occupied ports 4173 and 4185, so the running app was verified on the already available local 4185 instance. No external deployment or push was performed.
+
+## Exploration recognition pass
+
+This follow-up adds exploration memory without conflating “seen”, “visited”, and “currently visible”.
+
+- `Maze.explored` remains the exposed-area record and continues to drive the percentage. `Maze.visited` is a separate per-cell set populated only when Jelly physically occupies an already-exposed walkable cell. Reveal effects, pulse light, pause, camera changes, and the memory toggle never add visited cells.
+- Supplies have per-object `discovered` state. The state is committed only while the supply is currently visible through normal vision or the active pulse cone. Echo reveal alone does not discover a supply. A collected supply is removed from the active memory layer.
+- The canvas order keeps bright current objects separate from low-alpha memory layers. Explored terrain is drawn by `Maze`; small dot footprints are drawn by `Maze.drawFootprints`; discovered-but-hidden supplies use hollow dashed outlines; landmarks use low-alpha dashed thematic outlines. No memory layer adds a counter or changes scoring.
+- `LandmarkSystem` provides exactly two fixed, walkable, non-colliding landmarks on each of routes 1–3. They are scene cues only and have no pickup, hazard, exit, collision, or scoring behavior. Routes 4–6 normalize to an empty landmark list.
+
+### Fixed landmark table
+
+| Route | Landmark | Cell | Intended reading |
+| --- | --- | --- | --- |
+| 01 微光花園 | Flower bed | (8, 1) | Upper branch hub / first orientation cue |
+| 01 微光花園 | Plant border | (15, 8) | Exit-side return junction |
+| 02 藍色水道 | Water ripple | (7, 7) | Central split where the two supply routes meet |
+| 02 藍色水道 | Stone bank | (19, 7) | Exit-side waterway split |
+| 03 水晶迴廊 | Crystal cluster | (5, 3) | Upper branch landmark before the risk lane |
+| 03 水晶迴廊 | Cracked pillar | (17, 13) | Lower convergence landmark near the finish route |
+
+### Information surface and preview rules
+
+- The existing folded `探索資訊／玩法說明` panel now contains the exploration legend, a soft-outline orientation-landmark cue, and `顯示探索記憶` toggle. It does not add another always-visible metrics row.
+- Opening the panel silently pauses gameplay, timers, hazard movement, and input without opening the modal pause dialog. Closing it resumes the same run. Escape closes the panel first; the ordinary pause button remains available when the panel is closed.
+- Leaving copy explicitly states that unsettled mid-run exploration progress is not retained; already saved historical records are unaffected. Restart and leave reset the run-local visited/discovery sets.
+- Route cards show a thematic abstract preview while the selected route has no completion under its current rules version. The full map preview appears only after current-version completion; legacy records alone do not unlock it.
+
+## Verification for this pass
+
+- `npm test` — **43/43 passing**.
+- `npm run build` — **passing**; 6 levels, 21 runtime modules, and 14 required files validated.
+- Browser checks — **passing in the local Codex browser** at `http://localhost:4185/` for 360×640, 375×667, 390×844, 430×932, 844×390, and 1366×768. Portrait maze heights measured 280px, 302px, 440px, and 440px; touch direction buttons measured 48×48px; pulse controls measured 64px high. Landscape and desktop captures showed no visible viewport overflow. The expanded information panel stayed visible, held `#time-value` at `00:11` across a 650ms observation, and left the modal pause dialog closed. The route-1 preview exposed the abstract thematic canvas with `aria-label="尚未完成目前規則版本的主題示意圖"`; the game capture showed the directional pulse cone and cooldown state.
+- Screenshots — **inline browser captures verified during this run; no persistent screenshot files were created**. The visual checkpoints were the home abstract preview, desktop game canvas, expanded exploration panel, and active pulse state.
+- Physical devices — **not verified**; these are emulated browser viewports, so no real-device claim is made.
+- Deployment — **not performed**; no push, GitHub Pages publish, or external service mutation was made.

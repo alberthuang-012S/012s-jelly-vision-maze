@@ -5,6 +5,7 @@ export class Maze {
     this.width = level.width * tileSize;
     this.height = level.height * tileSize;
     this.explored = new Set();
+    this.visited = new Set();
     this.visible = new Set();
     this.pulseVisible = new Set();
     this.walkableCount = level.map.flat().filter((cell) => cell !== '#').length;
@@ -71,7 +72,20 @@ export class Maze {
 
   isCellVisible(col, row) { const key = this.cellKey(col, row); return this.visible.has(key) || this.pulseVisible.has(key); }
   isCellExplored(col, row) { return this.explored.has(this.cellKey(col, row)); }
+  isCellVisited(col, row) { return this.visited.has(this.cellKey(col, row)); }
   isPointVisible(x, y) { const cell = this.pointToCell(x, y); return this.isCellVisible(cell.col, cell.row); }
+  visit(col, row) {
+    if (this.isWall(col, row)) return false;
+    const key = this.cellKey(col, row);
+    if (!this.explored.has(key)) return false;
+    const wasVisited = this.visited.has(key);
+    this.visited.add(key);
+    return !wasVisited;
+  }
+  visitPoint(x, y) {
+    const cell = this.pointToCell(x, y);
+    return this.visit(cell.col, cell.row);
+  }
   explore(col, row) {
     const key = this.cellKey(col, row);
     if (this.explored.has(key)) return;
@@ -79,6 +93,25 @@ export class Maze {
     if (!this.isWall(col, row)) this.exploredWalkable += 1;
   }
   getExplorationRate() { return Math.floor(this.exploredWalkable / Math.max(1, this.walkableCount) * 100); }
+
+  drawFootprints(ctx, showMemory = true, excludedCell = null) {
+    if (!showMemory || !this.visited.size) return;
+    const t = this.tileSize;
+    const radius = Math.max(1.15, Math.min(2.2, t * 0.045));
+    ctx.save();
+    ctx.fillStyle = '#a7eedb';
+    for (const key of this.visited) {
+      const [col, row] = key.split(',').map(Number);
+      if (this.isWall(col, row) || !this.isCellExplored(col, row)) continue;
+      if (excludedCell && excludedCell.col === col && excludedCell.row === row) continue;
+      const visible = this.isCellVisible(col, row);
+      ctx.globalAlpha = visible ? 0.34 : 0.22;
+      ctx.beginPath();
+      ctx.arc(col * t + t * 0.28, row * t + t * 0.72, radius, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   draw(ctx, time) {
     const { tileSize: t, level } = this;

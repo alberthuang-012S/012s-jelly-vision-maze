@@ -120,8 +120,16 @@
             <summary>探索資訊／玩法說明 <span aria-hidden="true">＋</span></summary>
             <div class="exploration-info-content">
               <div class="info-stats">
-                <div><span>探索完成</span><strong id="exploration-value">0%</strong><i class="mini-meter"><i id="exploration-fill"></i></i></div>
+                <div><span>已揭露區域</span><strong id="exploration-value">0%</strong><i class="mini-meter"><i id="exploration-fill"></i></i></div>
                 <div><span>微光連鎖</span><strong id="chain-value">等待微光</strong><i class="mini-meter"><i id="chain-fill"></i></i></div>
+              </div>
+              <div class="memory-controls">
+                <label class="memory-toggle"><input id="memory-toggle" type="checkbox" checked /> 顯示探索記憶</label>
+                <div class="memory-legend" aria-label="探索記憶圖例">
+                  <span><i class="memory-swatch memory-seen"></i>淡色道路：看過</span>
+                  <span><i class="memory-swatch memory-visited"></i>點狀足跡：走過</span>
+                  <span><i class="memory-swatch memory-supply"></i>空心補給：已發現、尚未取得</span>
+                </div>
               </div>
               <div class="stage-legend" aria-label="遊戲圖例">
                 <span><i class="legend-dot legend-jelly"></i> 水母</span>
@@ -130,12 +138,14 @@
                 <span><i class="legend-dot legend-echo"></i> 微光 · 8 秒連鎖</span>
                 <span><i class="legend-dot legend-exit"></i> 出口</span>
                 <span><i class="legend-dot legend-beacon"></i> 信標 · 開啟出口</span>
+                <span><i class="legend-dot legend-landmark"></i> 方向地標 · 柔色輪廓協助定位</span>
                 <span><i class="legend-dot legend-trap"></i> 墨霧 · 等休眠再通過</span>
                 <span><i class="legend-dot legend-monster"></i> 暗影怪 · 前方脈衝可暈眩</span>
               </div>
               <div class="game-help">
                 <p><strong>操作</strong>方向鍵／WASD 移動，Q 或「前方脈衝」照亮面向前方 2 秒；手機可同時按住方向與脈衝。</p>
                 <p><strong>收集</strong>靠近微光與補給會自動收集；巧克力擴大視野，飲料在效果中延長視野。</p>
+                <p><strong>辨識</strong>已揭露區域只計看過的可行走格；點狀足跡只代表真的走過，空心補給只記住曾以正常視野或有效脈衝看見、尚未取得的位置。</p>
                 <p><strong>連鎖</strong>每次收集微光後有 8 秒窗口，下一個微光越快找到，連鎖加分越高。</p>
               </div>
             </div>

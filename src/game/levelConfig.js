@@ -38,6 +38,10 @@ const rawLevels = {
     ]}),
     supplies: [{ type: 'chocolate', col: 8, row: 3 }],
     echoes: [{ col: 3, row: 1 }, { col: 13, row: 3 }, { col: 4, row: 9 }],
+    landmarks: [
+      { id: 'garden-flower-bed', type: 'flowerBed', col: 8, row: 1, footprint: { width: 0.64, height: 0.42 } },
+      { id: 'garden-plant-border', type: 'plantBorder', col: 15, row: 8, footprint: { width: 0.62, height: 0.46 } }
+    ],
     hazardPlan: { traps: [], monsters: [] }
   },
   'level-2': {
@@ -51,6 +55,10 @@ const rawLevels = {
     ]}),
     supplies: [{ type: 'chocolate', col: 7, row: 3 }, { type: 'drink', col: 11, row: 7 }],
     echoes: [{ col: 15, row: 1 }, { col: 3, row: 13 }, { col: 15, row: 11 }],
+    landmarks: [
+      { id: 'water-ripple', type: 'waterRipple', col: 7, row: 7, footprint: { width: 0.68, height: 0.44 } },
+      { id: 'water-stone-bank', type: 'stoneBank', col: 19, row: 7, footprint: { width: 0.66, height: 0.44 } }
+    ],
     hazardPlan: {
       traps: [{ col: 15, row: 5, offset: 0 }, { col: 3, row: 11, offset: 1.8 }],
       monsters: []
@@ -69,6 +77,10 @@ const rawLevels = {
     ]}),
     supplies: [{ type: 'chocolate', col: 9, row: 3 }, { type: 'drink', col: 9, row: 11 }, { type: 'chocolate', col: 15, row: 13 }],
     echoes: [{ col: 7, row: 1 }, { col: 3, row: 3 }, { col: 13, row: 11 }, { col: 21, row: 13 }],
+    landmarks: [
+      { id: 'crystal-cluster', type: 'crystalCluster', col: 5, row: 3, footprint: { width: 0.62, height: 0.64 } },
+      { id: 'cracked-pillar', type: 'crackedPillar', col: 17, row: 13, footprint: { width: 0.46, height: 0.7 } }
+    ],
     hazardPlan: {
       traps: [{ col: 5, row: 5, offset: 0.4 }, { col: 11, row: 9, offset: 1.5 }, { col: 17, row: 9, offset: 2.4 }],
       monsters: [{ path: [{ col: 11, row: 5 }, { col: 12, row: 5 }, { col: 13, row: 5 }, { col: 14, row: 5 }, { col: 15, row: 5 }] }]
@@ -111,6 +123,10 @@ function normalizeLevel(level) {
     supplies: level.supplies.map((supply) => ({ ...supply })),
     echoes: (level.echoes || []).map((echo) => ({ ...echo })),
     beacons: (level.beacons || []).map((beacon) => ({ ...beacon })),
+    landmarks: (level.landmarks || []).map((landmark) => ({
+      ...landmark,
+      footprint: { ...(landmark.footprint || { width: 0.64, height: 0.5 }) }
+    })),
     hazardPlan: level.hazardPlan ? {
       traps: level.hazardPlan.traps.map((trap) => ({ ...trap })),
       monsters: level.hazardPlan.monsters.map((monster) => ({ path: monster.path.map((point) => ({ ...point })) }))

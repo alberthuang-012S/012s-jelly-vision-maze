@@ -12,6 +12,8 @@ const hud = new HUD();
 const progress = new ProgressStore();
 const pauseDialog = $('#pause-dialog');
 const confirmDialog = $('#confirm-dialog');
+const explorationInfo = $('#exploration-info');
+const memoryToggle = $('#memory-toggle');
 let pendingConfirmation = null;
 let selectedLevel = 'level-1';
 let lastResult = null;
@@ -21,10 +23,11 @@ const game = new Game({
   onClear: (result) => { lastResult = result; sound.clear(); showClear(result); },
   onPickup: (kind) => sound.pickup(kind), onEcho: (chain) => sound.echo(chain), onMove: () => sound.move(),
   onExitPrompt: (details) => openConfirmation('exit', details),
-  onPause: (paused) => {
-    if (paused && !pauseDialog.open) pauseDialog.showModal();
+  onPause: (paused, options = {}) => {
+    const showDialog = options.showDialog !== false;
+    if (paused && showDialog && !pauseDialog.open) pauseDialog.showModal();
     if (!paused && pauseDialog.open) pauseDialog.close();
-    $('#pause-button').textContent = paused ? '▶ 繼續' : 'Ⅱ 暫停';
+    if (showDialog) $('#pause-button').textContent = paused ? '▶ 繼續' : 'Ⅱ 暫停';
   }
 });
 const input = new InputController({
@@ -32,6 +35,7 @@ const input = new InputController({
   onScan: () => game.useScan(),
   onEscape: (event) => {
     if (!screens.game.hidden && confirmDialog.open) { event.preventDefault(); cancelConfirmation(); return; }
+    if (!screens.game.hidden && explorationInfo.open) { event.preventDefault(); explorationInfo.open = false; return; }
     if (!screens.game.hidden && !pauseDialog.open) { event.preventDefault(); game.togglePause(); }
   },
   onBlur: () => game.setPaused(true)
@@ -106,12 +110,20 @@ function updateRoutes() {
   } else {
     $('#route-best').textContent = '尚未探索 · 從這裡出發';
   }
-  const preview = $('#route-preview');
+  drawRoutePreview($('#route-preview'), level, color, Boolean(progress.getCurrent(selectedLevel)));
+}
+
+function drawRoutePreview(preview, level, color, unlocked) {
   const ctx = preview.getContext('2d');
+  ctx.clearRect(0, 0, preview.width, preview.height);
+  preview.setAttribute('aria-label', unlocked ? '已完成關卡的地圖預覽' : '尚未完成目前規則版本的主題示意圖');
+  if (!unlocked) {
+    drawThematicPreview(ctx, preview.width, preview.height, level, color);
+    return;
+  }
   const size = Math.min((preview.width - 16) / level.width, (preview.height - 16) / level.height);
   const ox = (preview.width - level.width * size) / 2;
   const oy = (preview.height - level.height * size) / 2;
-  ctx.clearRect(0, 0, preview.width, preview.height);
   level.map.forEach((row, y) => row.forEach((cell, x) => {
     ctx.fillStyle = cell === '#' ? '#122a43' : color;
     ctx.globalAlpha = cell === '#' ? 1 : 0.48;
@@ -128,17 +140,50 @@ function updateRoutes() {
   level.beacons.forEach((beacon) => ctx.fillRect(ox + (beacon.col + .5) * size - 2.5, oy + (beacon.row + .5) * size - 2.5, 5, 5));
 }
 
+function drawThematicPreview(ctx, width, height, level, color) {
+  ctx.save();
+  ctx.fillStyle = '#081a2d';
+  ctx.fillRect(0, 0, width, height);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = `${color}38`;
+  ctx.globalAlpha = 0.72;
+  if (level.number === '01') {
+    for (const [x, y] of [[width * .24, height * .34], [width * .56, height * .58], [width * .78, height * .3]]) {
+      ctx.beginPath(); ctx.roundRect(x - 22, y - 11, 44, 22, 10); ctx.fill(); ctx.stroke();
+      for (let index = 0; index < 3; index += 1) { ctx.beginPath(); ctx.arc(x - 10 + index * 10, y, 3, 0, Math.PI * 2); ctx.fill(); }
+    }
+  } else if (level.number === '02') {
+    for (const y of [height * .32, height * .5, height * .68]) {
+      ctx.beginPath(); ctx.moveTo(width * .15, y); ctx.bezierCurveTo(width * .34, y - 16, width * .52, y + 16, width * .85, y); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(width * .28, height * .48, 12, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(width * .72, height * .52, 18, 0, Math.PI * 2); ctx.stroke();
+  } else {
+    for (const [x, scale] of [[width * .3, .8], [width * .5, 1.2], [width * .7, .7]]) {
+      ctx.beginPath(); ctx.moveTo(x, height * .68); ctx.lineTo(x + 15 * scale, height * .3); ctx.lineTo(x + 28 * scale, height * .68); ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.moveTo(width * .18, height * .72); ctx.lineTo(width * .82, height * .72); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function updateCameraButton() {
   $('#camera-toggle').textContent = game.follow ? '切換全圖' : '跟隨視角';
   $('#camera-toggle').setAttribute('aria-pressed', String(game.follow));
 }
+function resetExplorationInfo() {
+  explorationInfo.open = false;
+  memoryToggle.checked = true;
+  game.setExplorationMemory(true);
+}
 function startSelectedLevel() {
   sound.unlock();
+  resetExplorationInfo();
   showScreen('game');
   game.start(selectedLevel);
   updateCameraButton();
 }
-function goHome() { game.stop(); updateRoutes(); showScreen('start'); }
+function goHome() { explorationInfo.open = false; game.stop(); updateRoutes(); showScreen('start'); }
 function nextLevelId(id) { return Object.keys(LEVELS)[Object.keys(LEVELS).indexOf(id) + 1] || null; }
 function recommendedRoute() {
   return Object.keys(LEVELS).find((id) => !progress.getCurrent(id)) || Object.keys(LEVELS).find((id) => (progress.getCurrent(id)?.stars || 0) < 3) || null;
@@ -208,7 +253,7 @@ function openConfirmation(kind, details = {}) {
     },
     leave: {
       kicker: 'LEAVE ROUTE', title: '離開本局探索？', cancel: '繼續探索', accept: '回到關卡選擇',
-      description: '尚未結算的本局進度會暫停保留；離開後可重新挑戰，已儲存的歷史紀錄不受影響。'
+      description: '離開後，本次尚未結算的探索進度不會保留；已儲存的歷史紀錄不受影響。'
     }
   }[kind];
   $('#confirm-kicker').textContent = copy.kicker;
@@ -228,13 +273,14 @@ function finishConfirmation(accepted) {
   const context = game.resolveConfirmation(accepted);
   if (!context) return;
   if (!accepted) {
-    if (context.fromState === 'paused') pauseDialog.showModal();
+    if (context.fromState === 'paused' && !context.silentPaused) pauseDialog.showModal();
     else $('#game-canvas').focus({ preventScroll: true });
     return;
   }
   if (pending.kind === 'exit') {
     game.clear();
   } else if (pending.kind === 'restart') {
+    resetExplorationInfo();
     game.restart();
     $('#game-canvas').focus({ preventScroll: true });
   } else if (pending.kind === 'leave') {
@@ -275,6 +321,8 @@ pauseDialog.addEventListener('cancel', (event) => { event.preventDefault(); if (
 $('#confirm-cancel').addEventListener('click', cancelConfirmation);
 $('#confirm-accept').addEventListener('click', () => finishConfirmation(true));
 confirmDialog.addEventListener('cancel', (event) => { event.preventDefault(); cancelConfirmation(); });
+explorationInfo.addEventListener('toggle', () => { game.setExplorationInfoOpen(explorationInfo.open); });
+memoryToggle.addEventListener('change', () => { game.setExplorationMemory(memoryToggle.checked); });
 $('#camera-toggle').addEventListener('click', () => { game.toggleCamera(); updateCameraButton(); $('#game-canvas').focus({ preventScroll: true }); });
 
 const SOUND_KEY = 'jellyVisionMaze.sound.v1';

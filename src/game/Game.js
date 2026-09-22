@@ -8,6 +8,7 @@ import { getCamera } from './Camera.js';
 import { ScanSystem } from './ScanSystem.js';
 import { BeaconSystem } from './BeaconSystem.js';
 import { HazardSystem } from './HazardSystem.js';
+import { LandmarkSystem } from './LandmarkSystem.js';
 
 export class Game {
   constructor({ canvas, viewport, hud, onClear, onPickup, onEcho, onMove, onPause, onExitPrompt }) {
@@ -26,6 +27,8 @@ export class Game {
     this.input = null;
     this.levelId = 'level-1';
     this.state = 'idle';
+    this.showExplorationMemory = true;
+    this.silentPaused = false;
     this.elapsed = 0;
     this.echoScore = 0;
     this.echoPulse = null;
@@ -54,12 +57,15 @@ export class Game {
     this.cameraTime = 0;
     this.beacons = new BeaconSystem(level, this.maze);
     this.hazards = new HazardSystem(level, this.maze);
+    this.landmarks = new LandmarkSystem(level, this.maze);
     this.exitHintShown = false;
     this.exitPromptArmed = true;
     this.confirmation = null;
     this.elapsed = 0;
     this.echoScore = 0;
     this.echoPulse = null;
+    this.showExplorationMemory = true;
+    this.silentPaused = false;
     this.state = 'playing';
     this.onPause?.(false);
     this.lastFrame = performance.now();
@@ -69,6 +75,9 @@ export class Game {
     this.hud.reset();
     this.input?.setEnabled(true);
     this.maze.updateVisibility(this.player.x, this.player.y, this.vision.currentRadius);
+    this.landmarks.updateDiscovery();
+    this.supplies.updateDiscovery();
+    this.maze.visitPoint(this.player.x, this.player.y);
     this.updateHUD();
     this.render(0);
     cancelAnimationFrame(this.frameId);
@@ -80,30 +89,56 @@ export class Game {
   stop() {
     this.state = 'idle';
     this.confirmation = null;
+    this.silentPaused = false;
     this.input?.setEnabled(false);
     cancelAnimationFrame(this.frameId);
     this.onPause?.(false);
   }
 
-  setPaused(paused) {
+  setPaused(paused, { showDialog = true } = {}) {
     if (!['playing', 'paused'].includes(this.state) || (this.state === 'paused') === paused) return;
     this.state = paused ? 'paused' : 'playing';
+    this.silentPaused = paused && !showDialog;
     this.input?.setEnabled(!paused);
     cancelAnimationFrame(this.frameId);
-    this.onPause?.(paused);
+    this.onPause?.(paused, { showDialog });
     if (!paused) {
       this.lastFrame = performance.now();
       this.frameId = requestAnimationFrame(this.boundLoop);
     }
   }
 
-  togglePause() { this.setPaused(this.state === 'playing'); }
+  togglePause() {
+    if (this.silentPaused) return false;
+    this.setPaused(this.state === 'playing');
+    return true;
+  }
+
+  setExplorationInfoOpen(open) {
+    if (open) {
+      if (this.state !== 'playing') return false;
+      this.setPaused(true, { showDialog: false });
+      return true;
+    }
+    if (this.state === 'paused' && this.silentPaused) {
+      this.setPaused(false, { showDialog: false });
+      return true;
+    }
+    return false;
+  }
+
+  setExplorationMemory(enabled) {
+    this.showExplorationMemory = Boolean(enabled);
+    this.render(this.elapsed);
+    return this.showExplorationMemory;
+  }
 
   beginConfirmation(kind) {
     if (!['playing', 'paused'].includes(this.state) || this.confirmation) return null;
     const fromState = this.state;
-    this.confirmation = { kind, fromState };
+    this.confirmation = { kind, fromState, silentPaused: this.silentPaused };
     this.state = 'confirming';
+    this.silentPaused = false;
     this.input?.setEnabled(false);
     cancelAnimationFrame(this.frameId);
     return { ...this.confirmation };
@@ -115,6 +150,7 @@ export class Game {
     this.confirmation = null;
     if (!accepted) {
       this.state = context.fromState;
+      this.silentPaused = context.silentPaused;
       this.input?.setEnabled(context.fromState === 'playing');
       if (context.fromState === 'playing') {
         this.lastFrame = performance.now();
@@ -124,6 +160,7 @@ export class Game {
       // The caller immediately chooses the follow-up action (clear, restart,
       // or leave), so there is intentionally no second animation loop here.
       this.state = 'playing';
+      this.silentPaused = false;
       this.input?.setEnabled(true);
     }
     return context;
@@ -134,6 +171,8 @@ export class Game {
     const activated = this.scan.activate(this.maze, this.player);
     if (activated) {
       this.maze.updatePulseVisibility(this.scan);
+      this.landmarks.updateDiscovery();
+      this.supplies.updateDiscovery();
       const affected = this.hazards.applyPulse(this.scan);
       this.hud.showToast(affected ? `前方脈衝 · 照亮 2 秒 · 壓制 ${affected} 處危險` : '前方脈衝 · 照亮 2 秒', { priority: 1 });
       this.onEcho?.(1);
@@ -180,6 +219,9 @@ export class Game {
     this.hazards.update(dt, this.player, this.vision, (name) => this.hud.showToast(`${name} · 視野縮小 3 秒，Q 可照亮前方`));
     this.maze.updateVisibility(this.player.x, this.player.y, this.vision.currentRadius);
     this.maze.updatePulseVisibility(this.scan);
+    this.landmarks.updateDiscovery();
+    this.supplies.updateDiscovery();
+    this.maze.visitPoint(this.player.x, this.player.y);
     this.echoPulse = this.echoPulse
       ? (this.echoPulse.life > dt ? { ...this.echoPulse, life: this.echoPulse.life - dt } : null)
       : null;
@@ -321,6 +363,7 @@ export class Game {
     this.ctx.scale(scale, scale);
     this.ctx.translate(-camera.x, -camera.y);
     this.maze.draw(this.ctx, time);
+    this.landmarks.draw(this.ctx, time, this.maze);
     this.echoes.draw(this.ctx, time, this.maze);
     this.supplies.draw(this.ctx, time, this.maze);
     this.beacons.draw(this.ctx, time);
@@ -329,6 +372,9 @@ export class Game {
     this.hazards.drawProtection(this.ctx, this.player, this.vision);
     if (!this.reducedMotion.matches) this.vision.drawBurst(this.ctx, this.player.x, this.player.y, time);
     this.drawVisionFog();
+    this.maze.drawFootprints(this.ctx, this.showExplorationMemory, this.maze.pointToCell(this.player.x, this.player.y));
+    this.supplies.drawMemory(this.ctx, this.maze, this.showExplorationMemory);
+    this.landmarks.drawMemory(this.ctx, this.maze, this.showExplorationMemory);
     this.scan.draw(this.ctx, this.reducedMotion.matches);
     if (!this.reducedMotion.matches) this.drawEchoPulse();
     this.ctx.restore();
